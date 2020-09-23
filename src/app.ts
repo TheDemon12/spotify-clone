@@ -4,6 +4,7 @@ import logger from './middlewares/logger';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
+import config from 'config';
 
 const app = express();
 
@@ -14,6 +15,7 @@ app.use(logger);
 
 app.use('/tracks', tracks);
 
+console.log(config.get('name'));
 app.listen(3500, () => console.log('listening at port 3500'));
 
 const connectToDB = async () => {
@@ -22,7 +24,7 @@ const connectToDB = async () => {
 			useNewUrlParser: true,
 			useUnifiedTopology: true,
 		});
-		console.log('done');
+		console.log('Connected to MongoDB');
 	} catch (ex) {
 		console.log(ex);
 	}

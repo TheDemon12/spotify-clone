@@ -4,10 +4,12 @@ import mongoose from 'mongoose';
 import multer from 'multer';
 import aws from 'aws-sdk';
 import multerS3 from 'multer-s3';
+import config from 'config';
+import express from 'express';
 
-const ID = '';
-const SECRET = '';
-const BUCKET_NAME = '';
+const ID: string = config.get('awsAccessKeyId');
+const SECRET: string = config.get('awsSecretAccessKey');
+const BUCKET_NAME: string = config.get('awsBucketName');
 
 const s3 = new aws.S3({
 	accessKeyId: ID,
@@ -16,28 +18,33 @@ const s3 = new aws.S3({
 
 const router = Router();
 
-// const list = [
-// 	{
-// 		name: '',
-// 		id: '',
-// 		duration: '',
-// 		images: [
-// 			{
-// 				height: 640,
-// 				url:
-// 					'https://i.scdn.co/image/966vade7a8c43b72faa53822b74a899c675aaafee',
-// 				width: 640,
-// 			},
-// 		],
+interface TrackImages {
+	name: String;
+	size: Number;
+	imageKey: String;
+}
+interface Track {
+	name: String;
+	duration: Number;
+	images: TrackImages[];
+	artists: Array<String>;
+}
+interface TrackSchema extends Track, mongoose.Document {}
 
-// 		artists: [
-// 			{
-// 				name: '',
-// 				id: '',
-// 			},
-// 		],
-// 	},
-// ];
+const trackSchema = new mongoose.Schema({
+	name: String,
+	duration: Number,
+	images: [{ name: String, size: Number, imageKey: String }],
+	artists: [String],
+});
+
+const Track = mongoose.model<TrackSchema>('Track', trackSchema, 'tracks');
+
+const newTrack = async (track: Track) => {
+	const newTrack = new Track(track);
+	const savedTrack = await newTrack.save();
+	console.log(savedTrack);
+};
 
 let upload = multer({
 	storage: multerS3({
@@ -103,35 +110,47 @@ router.get('/', async (req, res) => {
 router.post(
 	'/',
 	upload.array('images', 10),
-	(
-		req: Request<
-			{},
-			{},
-			{ name: string; duration: number; images: File[]; artists: string[] }
-		>,
+	async (
+		req: Request<{}, {}, { name: string; duration: number; artists: string[] }>,
 		res
 	) => {
-		// const validateSchema = {
-		// 	name: Joi.string().min(5).max(25).required(),
-		// };
+		const { artists, duration, name } = req.body;
 
-		// const { error } = Joi.object(validateSchema).validate(req.body);
-		// if (error) return res.status(400).send(error.details[0].message);
-		// uploadFile(req.files.images);
-		// console.log(req.files, req.body);
-		// console.log(req.files);
+		const validateSchema = {
+			name: Joi.string().min(5).max(25).required(),
+			duration: Joi.number().required(),
+			artists: Joi.array().items(Joi.string()).required(),
+		};
 
-		let images: Array<{ name: string; size: number; imageKey: string }> = [];
+		const { error } = Joi.object(validateSchema).validate({
+			artists,
+			duration,
+			name,
+		});
+		if (error) return res.status(400).send(error.details[0].message);
 
-		for (let key in req.files) {
-			const file = req.files[key];
-			images.push({
-				name: file.originalname,
-				size: file.size,
-				imageKey: file.key,
-			});
+		let images: TrackImages[] = [];
+
+		if (!Array.isArray(req.files)) {
+			const files = req.files['images'];
+
+			files.forEach((file: any) =>
+				images.push({
+					name: file.originalname,
+					size: file.size,
+					imageKey: file.key,
+				})
+			);
+		} else {
+			req.files.forEach((file: any) =>
+				images.push({
+					name: file.originalname,
+					size: file.size,
+					imageKey: file.key,
+				})
+			);
 		}
-		list.push({ ...req.body, images });
+		await newTrack({ artists, duration, name, images });
 		res.status(200).send('Done');
 	}
 );
