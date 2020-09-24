@@ -1,6 +1,6 @@
 import { Router, Request } from 'express';
 import Joi from 'joi';
-import mongoose from 'mongoose';
+import mongoose, { mongo } from 'mongoose';
 import multer from 'multer';
 import aws from 'aws-sdk';
 // import multerS3 from 'multer-s3';
@@ -24,6 +24,7 @@ interface TrackImage {
 	name: String;
 	size: Number;
 	imageKey: String;
+	src?: String;
 }
 interface TrackFile {
 	name: String;
@@ -122,16 +123,52 @@ router.get('/', async (req, res) => {
 	// );
 });
 
-router.get('/i', async (req, res) => {
-	const images = await s3
-		.getObject({
-			Bucket: BUCKET_NAME,
-			Key: 'sufna-jannat/images/logo512.png',
-		})
-		.promise();
-	console.log(images);
-	res.send(images);
-});
+router.get(
+	'/:id',
+	async (
+		req: Request<{ id: string }, {}, {}, { images: 'none' | 'single' | 'all' }>,
+		res
+	) => {
+		const trackId = req.params.id;
+		const imageQuery = req.query.images;
+
+		const track = await Track.findOne({
+			_id: trackId,
+		});
+
+		if (track) {
+			const response: TrackSchema = track.toObject();
+
+			if (imageQuery && imageQuery !== 'none') {
+				if (imageQuery === 'single') {
+					const image = response.images[0];
+
+					const imageBuffer = await s3
+						.getObject({
+							Bucket: BUCKET_NAME,
+							Key: image.imageKey.toString(),
+						})
+						.promise();
+
+					image.src = imageBuffer.Body!.toString('base64');
+				} else if (imageQuery === 'all') {
+					for (let image of response.images) {
+						const imageBuffer = await s3
+							.getObject({
+								Bucket: BUCKET_NAME,
+								Key: image.imageKey.toString(),
+							})
+							.promise();
+
+						image.src = imageBuffer.Body!.toString('base64');
+					}
+				}
+			}
+
+			res.send(response).status(200);
+		}
+	}
+);
 
 router.post(
 	'/',
