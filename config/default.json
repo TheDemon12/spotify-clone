@@ -1,4 +1,5 @@
 {
 	"name": "spotify-clone",
-	"awsBucketName": "spotify-clone-thedemon12"
+	"awsBucketName": "spotify-clone-thedemon12",
+	"awsRegion": "ap-south-1"
 }
