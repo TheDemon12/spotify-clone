@@ -2,57 +2,11 @@ import { Router, Request } from 'express';
 import Joi from 'joi';
 import mongoose from 'mongoose';
 import multer from 'multer';
-import aws from 'aws-sdk';
-import config from 'config';
-
-const ID: string = config.get('awsAccessKeyId');
-const SECRET: string = config.get('awsSecretAccessKey');
-const BUCKET_NAME: string = config.get('awsBucketName');
-const REGION: string = config.get('awsRegion');
-
-const s3 = new aws.S3({
-	accessKeyId: ID,
-	secretAccessKey: SECRET,
-	region: REGION,
-});
+import { Track, TrackModel, TrackFile, TrackImage } from '../models/tracks';
+import { s3, BUCKET_NAME } from '../services/S3';
 
 const router = Router();
 let parseFormData = multer();
-
-interface TrackImage {
-	name: String;
-	size: Number;
-	imageKey: String;
-	src?: String;
-}
-interface TrackFile {
-	name: String;
-	trackKey: String;
-	size: Number;
-}
-interface Track {
-	name: String;
-	duration: Number;
-	images: TrackImage[];
-	artists: Array<String>;
-	trackFile: TrackFile;
-}
-interface TrackSchema extends Track, mongoose.Document {}
-
-const trackSchema = new mongoose.Schema({
-	name: String,
-	duration: Number,
-	images: [{ name: String, size: Number, imageKey: String }],
-	artists: [String],
-	trackFile: { name: String, trackKey: String, size: Number },
-});
-
-const Track = mongoose.model<TrackSchema>('Track', trackSchema, 'tracks');
-
-const newTrack = async (track: Track) => {
-	const newTrack = new Track(track);
-	await newTrack.save();
-};
 
 router.get(
 	'/',
@@ -61,7 +15,7 @@ router.get(
 		res
 	) => {
 		const imageQuery = req.query.images;
-		const tracks = await Track.find();
+		const tracks = await TrackModel.find();
 
 		if (tracks) {
 			let response: Track[] = [];
@@ -82,6 +36,7 @@ router.get(
 						image.src = imageBuffer.Body!.toString('base64');
 						response.push(res);
 					}
+					return res.send(response);
 				}
 				if (imageQuery === 'all') {
 					for (let track of tracks) {
@@ -99,10 +54,11 @@ router.get(
 						}
 						response.push(res);
 					}
+					return res.send(response);
 				}
+				return res.send(tracks);
 			}
-
-			res.send(response);
+			return res.send(tracks);
 		}
 	}
 );
@@ -116,12 +72,12 @@ router.get(
 		const trackId = req.params.id;
 		const imageQuery = req.query.images;
 
-		const track = await Track.findOne({
+		const track = await TrackModel.findOne({
 			_id: trackId,
 		});
 
 		if (track) {
-			const response: TrackSchema = track.toObject();
+			const response: Track = track.toObject();
 
 			if (imageQuery && imageQuery !== 'none') {
 				if (imageQuery === 'single') {
@@ -157,7 +113,7 @@ router.get(
 router.get('/:id/play', async (req: Request<{ id: string }>, res) => {
 	const trackId = req.params.id;
 
-	const data = await Track.findOne({
+	const data = await TrackModel.findOne({
 		_id: trackId,
 	});
 
@@ -243,13 +199,16 @@ router.post(
 					};
 				}
 			}
-			await newTrack({
+
+			const newTrack = new TrackModel({
 				artists,
 				duration,
 				name,
 				images: imagesInDB,
 				trackFile: trackInDB!,
 			});
+			await newTrack.save();
+
 			return res.status(200).send('Done');
 		}
 		return res.status(400).send('lol');
