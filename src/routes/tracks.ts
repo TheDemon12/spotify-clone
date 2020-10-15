@@ -1,6 +1,5 @@
 import { Router, Request } from 'express';
 import Joi from 'joi';
-import mongoose from 'mongoose';
 import multer from 'multer';
 import { Track, TrackModel, TrackFile, TrackImage } from '../models/tracks';
 import { s3, BUCKET_NAME } from '../services/S3';
